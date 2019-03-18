@@ -55,6 +55,8 @@ double test(int type, int commsize){
     return t2-t1;
 }
 
+
+
 int main(int argc, char **argv){
     int type = atoi(argv[1]);
     MPI_Init(&argc, &argv); int commsize;
@@ -86,16 +88,16 @@ int main(int argc, char **argv){
 
         if(n>1) summ = (summ*(n-1)+stime)/n; 
         else summ = stime;//counting mean among the runs
-        msg[0] = summ;
-        msg[1] = lsumm;
 
         diff = summ-lsumm;//diff changing between means
         if(diff<0)
             diff = -diff;
+            
         n++; 
     } while(diff > tick); //tick^2 for the sake of some extra precision
     if(procrang == 0)
         printf("RESULT s: %e\n", summ);
+    
     MPI_Finalize();
     return(0);
 }
