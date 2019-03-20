@@ -208,14 +208,13 @@ int main(int argc, char **argv){
 
     do{
         MPI_Barrier(MPI_COMM_WORLD);
-        testtime = test(type, commsize); //running test for thread
+        testtime = Own_test(type, commsize); //running test for thread
         lsumm = summ;
         MPI_Reduce(&testtime, &stime, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         stime /= commsize; //getting mean time among thee threads
         MPI_Bcast(&stime, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD );//syncing mean time
 
-        if(n>1) summ = (summ*(n-1)+stime)/n; 
-        else summ = stime;//counting mean among the runs
+        summ = (summ*(n-1)+stime)/n; 
 
         diff = summ-lsumm;//diff changing between means
         if(diff<0)
