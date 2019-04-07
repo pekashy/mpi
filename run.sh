@@ -1,4 +1,4 @@
 #!/bin/bash
-mpicc -std=gnu99 main.c -o gravedigger4
+make
 ls
-mpirun -np 50 --oversubscribe ./gravedigger4 4
+mpirun -np 16 --oversubscribe ./run 4
