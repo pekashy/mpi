@@ -8,6 +8,12 @@
 #include <string.h>
 #include <stdlib.h>
 
+typedef struct number{
+    char* sum[2];
+    int add[2];
+} num;
+
+
 int main(int argc, char** argv){
     MPI_Init(&argc, &argv); 
 
@@ -38,16 +44,22 @@ int main(int argc, char** argv){
     _num1[length] = '\0';
     _num2[length] = '\0';
 
-    //printf("%d sum: %s %s\n",procrang, _num1, _num2);
-    fflush(stdout);
     char _mnum1[9];
     char _mnum2[9];
+    
     int sum;
     char _sum[9];
     int add = 0;
-    if(procrang != commsize-1){
-        MPI_Recv(&add, 1, MPI_INT, procrang+1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-    }
+
+    int sum1;
+    char _sum1[9];
+    int add1 = 1;
+
+    num* res = malloc(sizeof(num));
+    res->sum[0] = malloc((length+1)*sizeof(char));
+    res->sum[1] = malloc((length+1)*sizeof(char));
+    res->add[0] = 0;
+    res->add[1] = 0;
 
     char* _gsum = malloc(sizeof(char)*(length+1));
     char gadd = 0;
@@ -58,29 +70,44 @@ int main(int argc, char** argv){
         memcpy(_mnum2, (_num2+(i-1)*8), 8);
         _mnum1[8] = '\0';
         _mnum2[8] = '\0';
+
         sum = atoi(_mnum1) + atoi(_mnum2) + add;
         add = sum/1e8;
-        //printf("    %s %s %d %d\n", _mnum1, _mnum2, sum, add);
         if(add == 1) sum-=1e8;
         if(sum<1e7) sprintf(_sum, "0%d", sum);
         else sprintf(_sum, "%d", sum);
         _sum[8] = '\0';
-        //printf("sum: %s\n", _sum);
-        memcpy((_gsum + (i-1)*8), _sum, 8);
+
+        sum1 = atoi(_mnum1) + atoi(_mnum2) + add1;
+        add1 = sum1/1e8;
+        if(add1 == 1) sum1-=1e8;
+        if(sum1<1e7) sprintf(_sum1, "0%d", sum1);
+        else sprintf(_sum1, "%d", sum1);
+        _sum1[8] = '\0';
+
+        memcpy((res->sum[0] + (i-1)*8), _sum, 8);
+        memcpy((res->sum[1] + (i-1)*8), _sum1, 8);
     }
     
-    gadd = add;
-    _gsum[length] = '\0';
+    res->add[0] = add;
+    res->add[1] = add1;
+    res->sum[0][length] = '\0';
+    res->sum[1][length] = '\0';
+
     //printf("%d gsum: %d %s\n", procrang, gadd, _gsum);
+    int real_add = 0;
+    if(procrang != commsize-1){
+        MPI_Recv(&real_add, 1, MPI_INT, procrang+1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+    }
+    
     if(procrang>0){
-        MPI_Send(&gadd, 1, MPI_INT, procrang-1, 0, MPI_COMM_WORLD);
-        MPI_Send(_gsum, length+1, MPI_CHARACTER, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(&res->add[real_add], 1, MPI_INT, procrang-1, 0, MPI_COMM_WORLD);
+        MPI_Send(res->sum[real_add], length+1, MPI_CHARACTER, 0, 0, MPI_COMM_WORLD);
     }
     else{    
-        if(gadd == 1) fwrite("1", 1, 1, outf);
-
+        if(res->add[real_add] == 1) fwrite("1", 1, 1, outf);
         //printf("0: %s\n", _gsum);
-        fwrite(_gsum, length, 1, outf);
+        fwrite(res->sum[real_add], length, 1, outf);
         fflush(stdout);
         char rsum[length+1];
         for(int i=1; i < pnum; i++){
