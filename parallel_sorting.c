@@ -22,12 +22,14 @@ typedef struct mini_array{
 
     pthread_mutex_t* mutex; 
     pthread_mutex_t* omutex; 
+    pthread_mutex_t** mutexes; 
+    pthread_mutex_t** omutexes; 
     pthread_mutex_t* neigh_omutex; 
     pthread_mutex_t* neigh_mutex; 
 
 } marr;
 
-int finished;
+sem_t finish_sem;
 
 void oddEvenSorting(int* array, int arrayLength) {
     int temp;
@@ -83,38 +85,37 @@ int swap_to_end(int* arr, int len, int* changed){
 
 int* threadFunc(void* argm){
     marr* arg = (marr*) argm;
+    sem_wait(&finish_sem); 
     //printf("%d %d %d", arg->arr[0], arg->arr[1], arg->len);
     int unsorted = 1;
     int temp=0;
     int limit;
     if(arg->len < 2) return arg->arr;
     int* pointer;
-	while(arg->changed) {
+	for(int count =0; count < arg->total_len*4; count++) {
         pointer = arg->start;
         arg->changed = 0;
         if(arg->len % 2 ==0){
-            pthread_mutex_lock(arg->mutex); //E
-            pthread_mutex_lock(arg->omutex);
+            if( arg->mutex) pthread_mutex_lock(arg->mutex); //E
+            if( arg->omutex) pthread_mutex_lock(arg->omutex);
             cmp_and_swap(pointer, (pointer+1), &arg->changed);
-            print(arg->arr, arg->total_len);
-            print(arg->start, arg->len);
+            //print(arg->arr, arg->total_len);
+            //print(arg->start, arg->len);
             pointer +=2;
             pthread_mutex_unlock(arg->mutex);
             pointer += swap_to_end(pointer, arg->len - 1 , &arg->changed);
-            print(arg->arr, arg->total_len);
-            print(arg->start, arg->len);
+            //print(arg->arr, arg->total_len);
+            //print(arg->start, arg->len);
             if(arg->num == 0) 
                 pthread_mutex_unlock(arg->omutex);
 
             pointer = arg->start + 1;
-            pthread_mutex_lock(arg->omutex); //M
-            print(arg->arr, arg->total_len);
-            print(arg->start, arg->len);
+            if( arg->omutex) pthread_mutex_lock(arg->omutex); //M
             pointer += swap_to_end(pointer, arg->len -1 , &arg->changed);
             if(arg->neigh_mutex)
                 pthread_mutex_lock(arg->neigh_mutex);
-            print(arg->arr, arg->total_len);
-            print(arg->start, arg->len);
+            //print(arg->arr, arg->total_len);
+            //print(arg->start, arg->len);
             if(arg->neigh_mutex){
                 if(cmp_and_swap(pointer, (pointer+1), &arg->changed))
                     arg->neigh_changed = 1;
@@ -124,12 +125,12 @@ int* threadFunc(void* argm){
                 pthread_mutex_unlock(arg->neigh_mutex);
             pthread_mutex_unlock(arg->omutex); 
             if(arg->neigh_omutex)
-                pthread_mutex_unlock(arg->neigh_omutex); 
-            print(arg->arr, arg->total_len);
-            print(arg->start, arg->len);
-            printf("cycle end c %d\n", arg->changed);
+               pthread_mutex_unlock(arg->neigh_omutex); 
+            //fflush(stdout);
+            //print(arg->arr, arg->total_len);
+            //print(arg->start, arg->len);
+            //printf("cycle end c %d\n", arg->changed);
         }
-
         //pthread_mutex_destroy(arg->neigh_mutex);
         //pthread_mutex_destroy(arg->neigh_omutex);
         //arg->neigh_mutex = NULL;
@@ -141,13 +142,21 @@ int* threadFunc(void* argm){
     /*if(arg->neigh_omutex)
         pthread_mutex_unlock(arg->neigh_omutex);
     if(arg->neigh_mutex)
-        pthread_mutex_unlock(arg->neigh_mutex);
+        pthread_mutex_unlock(arg->neigh_mutex);*/
     pthread_mutex_unlock(arg->mutex);
-    pthread_mutex_unlock(arg->omutex);*/
-    printf("thread finished %d\n", finished);
+    pthread_mutex_unlock(arg->omutex);
+    /*for(int t = 0; t< arg->total_num; t++){
+       //printf("freeing mutexes in %d\n", t);
+       //if(arg->mutexes[t]) pthread_mutex_unlock(arg->mutexes[t]);
+       //pthread_mutex_unlock(arg->omutexes[t]); 
+       arg->mutexes[t] = NULL;
+       arg->omutexes[t] = NULL;
+    }*/
     fflush(stdout);
     //if(arg->nmutex) pthread_mutex_unlock(arg->nmutex);
-    finished--;
+    print(arg->arr, arg->total_len);
+    sem_post(&finish_sem); 
+
     return arg->arr;
 }
 
@@ -169,7 +178,9 @@ int main(int argc, char** argv){
     pthread_t threads[nthreads];
     pthread_mutex_t* mutexes = calloc(nthreads, sizeof(pthread_mutex_t));
     pthread_mutex_t* omutexes = calloc(nthreads, sizeof(pthread_mutex_t));
-    finished = nthreads;
+    
+    sem_init(&finish_sem, 0, nthreads);
+
     for(int t=0; t < nthreads; t++){
         arrs[t].num = t;
         arrs[t].total_num = nthreads;
@@ -190,18 +201,19 @@ int main(int argc, char** argv){
             arrs[t].neigh_omutex = NULL;
             arrs[t].neigh_mutex = NULL;
         }
-        printf("%d: %d\n", t, arrs[t].len);
+        //printf("%d: %d\n", t, arrs[t].len);
         if(t > 0){
             arrs[t-1].neigh_omutex = arrs[t].omutex;
             arrs[t-1].neigh_mutex = arrs[t].mutex;
             arrs[t-1].neigh_changed = arrs[t].changed;
         }
         
-
         arrs[t].arr = array;//calloc(len, sizeof(int));
         arrs[t].start = array + t*arrs[t].len;//calloc(len, sizeof(int));
         arrs[t].left_index_c = t*(len/nthreads+1);
         arrs[t].left_index_n = arrs[t].left_index_c+1;
+       // arrs[t].mutexes = &mutexes;
+        //arrs[t].omutexes = &omutexes;
         //printf("%d: %d %d\n", t, arrs[t].left_index_c, arrs[t].left_index_c+arrs[t].len-1);
         /*memcpy(arrs[t].arr, array, len*sizeof(int));  
         ret[t] = calloc(len/nthreads+1, sizeof(int));  */
@@ -218,14 +230,10 @@ int main(int argc, char** argv){
     memcpy(ret[0], arrs[0].arr, arrs[0].len*sizeof(int));*/
 
     threadFunc(&arrs[0]);
-    int* r = calloc(len, sizeof(int));
 
-    for(int t=1; t<nthreads; t++){ //reasing results to ret
-        if(!threads[t]) continue;
-        pthread_join(threads[t], &r);
-    }
+    sem_wait(&finish_sem); 
+    fflush(stdout);
     print(array, len);
-    //print(r, len);
 
     /*int piece;
     for(int a=0; a < nthreads; a++){ // printing results
