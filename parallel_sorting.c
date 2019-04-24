@@ -8,20 +8,26 @@
 #include <string.h>
 #include <semaphore.h>
 
-
-
 typedef struct mini_array{
     int* arr;
+    int* start;
     int len;
     int total_len;
     int num;
     int total_num;
     int left_index_c;
     int left_index_n;
+    int* changed;
+    int* neigh_changed;
 
-    pthread_mutex_t* cmutex; 
-    pthread_mutex_t* nmutex; 
+    pthread_mutex_t* mutex; 
+    pthread_mutex_t* omutex; 
+    pthread_mutex_t* neigh_omutex; 
+    pthread_mutex_t* neigh_mutex; 
+
 } marr;
+
+int finished;
 
 void oddEvenSorting(int* array, int arrayLength) {
     int temp;
@@ -40,79 +46,109 @@ void oddEvenSorting(int* array, int arrayLength) {
 void print(int* arr, int len){
     for(int a=0; a< len; a++){
         printf("%d ", arr[a]);
-        fflush(stdout);
     }
     printf("\n");
     fflush(stdout);
+}
+
+int cmp_and_swap(int* a, int* b, int* changed){
+    int c;
+    if(*a > *b){
+        c = *a;
+        *a = *b;
+        *b = c;
+        *changed = 1;
+        return 1;
+    }
+    return 0;
+}
+
+
+int swap_to_end(int* arr, int len, int* changed){
+    int c;
+    int *a, *b;
+    int i;
+    for (i = 0; i < len-1; i+=2) {
+        a = (arr+i);
+        b = (arr+i+1);
+        if(*a > *b){
+            c = *a;
+            *a = *b;
+            *b = c;
+            *changed = 1;
+        }
+    }
+    return i;
 }
 
 int* threadFunc(void* argm){
     marr* arg = (marr*) argm;
     //printf("%d %d %d", arg->arr[0], arg->arr[1], arg->len);
     int unsorted = 1;
-    int* array = arg->arr;
-    int arrayLength = arg->len;
     int temp=0;
     int limit;
-    int changed = 1;
-	for (int i = 0; i < arg->total_len*2; i++) {
-        changed = 0;
-        print(arg->arr, arg->total_len);
-        
-        if(arg->nmutex) pthread_mutex_lock(arg->nmutex);
-        if(arg->cmutex) pthread_mutex_unlock(arg->cmutex);
-        if(arg->num == arg->total_num)
-            limit = arg->left_index_c+arrayLength-1;
-        else 
-            limit = arg->left_index_c+arrayLength;
-        for(int j=arg->left_index_c; j < limit; j+=2){
-            if (array[j] > array[j + 1]) {
-                temp = array[j + 1];
-                array[j + 1] = array[j];
-                array[j] = temp;
-                changed = 1;
-			}
+    if(arg->len < 2) return arg->arr;
+    int* pointer;
+	while(arg->changed) {
+        pointer = arg->start;
+        arg->changed = 0;
+        if(arg->len % 2 ==0){
+            pthread_mutex_lock(arg->mutex); //E
+            pthread_mutex_lock(arg->omutex);
+            cmp_and_swap(pointer, (pointer+1), &arg->changed);
             print(arg->arr, arg->total_len);
-        }
-        printf("changed c: %d\n", changed);
-
-        if(arg->cmutex) pthread_mutex_lock(arg->cmutex);
-
-        if(arg->num == arg->total_num)
-            limit = arg->left_index_n+arrayLength-1;
-        else 
-            limit = arg->left_index_n+arrayLength;
-
-        for(int j=arg->left_index_n; j < limit; j+=2){
-            if (array[j] > array[j + 1] && ((j + 1) < arg->left_index_n+arrayLength-1) && arg->num != arg->total_num) {
-                temp = array[j + 1];
-                array[j + 1] = array[j];
-                array[j] = temp;
-                changed = 1;
-			}
+            print(arg->start, arg->len);
+            pointer +=2;
+            pthread_mutex_unlock(arg->mutex);
+            pointer += swap_to_end(pointer, arg->len - 1 , &arg->changed);
             print(arg->arr, arg->total_len);
+            print(arg->start, arg->len);
+            if(arg->num == 0) 
+                pthread_mutex_unlock(arg->omutex);
+
+            pointer = arg->start + 1;
+            pthread_mutex_lock(arg->omutex); //M
+            print(arg->arr, arg->total_len);
+            print(arg->start, arg->len);
+            pointer += swap_to_end(pointer, arg->len -1 , &arg->changed);
+            if(arg->neigh_mutex)
+                pthread_mutex_lock(arg->neigh_mutex);
+            print(arg->arr, arg->total_len);
+            print(arg->start, arg->len);
+            if(arg->neigh_mutex){
+                if(cmp_and_swap(pointer, (pointer+1), &arg->changed))
+                    arg->neigh_changed = 1;
+            }
+            pointer+=2;
+            if(arg->neigh_mutex)
+                pthread_mutex_unlock(arg->neigh_mutex);
+            pthread_mutex_unlock(arg->omutex); 
+            if(arg->neigh_omutex)
+                pthread_mutex_unlock(arg->neigh_omutex); 
+            print(arg->arr, arg->total_len);
+            print(arg->start, arg->len);
+            printf("cycle end c %d\n", arg->changed);
         }
-        //print(arg->arr, arg->total_len);
-        printf("changed n: %d\n", changed);
 
-        if(arg->nmutex) pthread_mutex_unlock(arg->nmutex);
-        //if(changed == 0) break;
-
-	    // (i % 2) ? 0 : 1 возвращает 1, если i четное, 0, если i не четное
-		/*for (int j = (i % 2) ? 0 : 1; j < arrayLength - 1; j += 2) {
-			if (array[j] > array[j + 1]) {
-                temp = array[j + 1];
-                array[j + 1] = array[j];
-                array[j] = temp;
-			}
-		}*/
+        //pthread_mutex_destroy(arg->neigh_mutex);
+        //pthread_mutex_destroy(arg->neigh_omutex);
+        //arg->neigh_mutex = NULL;
+        //arg->neigh_omutex = NULL;
 	}
     //if(arg->cmutex) pthread_mutex_unlock(arg->cmutex);
-    printf("thread finished\n");
+    //arg->mutex = NULL;
+    //arg->omutex = NULL;
+    /*if(arg->neigh_omutex)
+        pthread_mutex_unlock(arg->neigh_omutex);
+    if(arg->neigh_mutex)
+        pthread_mutex_unlock(arg->neigh_mutex);
+    pthread_mutex_unlock(arg->mutex);
+    pthread_mutex_unlock(arg->omutex);*/
+    printf("thread finished %d\n", finished);
     fflush(stdout);
     //if(arg->nmutex) pthread_mutex_unlock(arg->nmutex);
-
-    return array;
+    finished--;
+    return arg->arr;
 }
 
 
@@ -127,34 +163,43 @@ int main(int argc, char** argv){
         fscanf(inf, "%d", &element);
         array[a] = element;
     }
-
+    int* changed = calloc(nthreads, sizeof(int));
     marr* arrs = calloc(nthreads, sizeof(marr));//allocating memory
     int* ret[nthreads];
     pthread_t threads[nthreads];
-    pthread_mutex_t* mutexes = calloc(nthreads-1, sizeof(pthread_mutex_t));
+    pthread_mutex_t* mutexes = calloc(nthreads, sizeof(pthread_mutex_t));
+    pthread_mutex_t* omutexes = calloc(nthreads, sizeof(pthread_mutex_t));
+    finished = nthreads;
     for(int t=0; t < nthreads; t++){
         arrs[t].num = t;
         arrs[t].total_num = nthreads;
         arrs[t].total_len = len;
+        arrs[t].changed = &changed[t];
+        *arrs[t].changed = 1;
+        arrs[t].mutex = &mutexes[t];
+        arrs[t].omutex = &omutexes[t];
+        pthread_mutex_init(arrs[t].mutex, NULL);
+        pthread_mutex_init(arrs[t].omutex, NULL);
+
         if(t < nthreads-1){ 
-            arrs[t].len = len/nthreads+1;
-            arrs[t].cmutex = NULL;
-            arrs[t].nmutex = &mutexes[t];
+            arrs[t].len = len/nthreads;
             //pthread_mutex_init(arrs[t].nmutex, NULL);
         }
         else{
-            arrs[t].len = len - (len/nthreads+1)*t;
-            arrs[t].nmutex = NULL;
+            arrs[t].len = len - (len/nthreads)*t;
+            arrs[t].neigh_omutex = NULL;
+            arrs[t].neigh_mutex = NULL;
         }
-        //printf("%d: %d\n", t, arrs[t].len);
+        printf("%d: %d\n", t, arrs[t].len);
         if(t > 0){
-            arrs[t].cmutex = &mutexes[t-1];
-            pthread_mutex_init(arrs[t].cmutex, NULL);
-            pthread_mutex_lock(arrs[t].cmutex);
+            arrs[t-1].neigh_omutex = arrs[t].omutex;
+            arrs[t-1].neigh_mutex = arrs[t].mutex;
+            arrs[t-1].neigh_changed = arrs[t].changed;
         }
         
 
         arrs[t].arr = array;//calloc(len, sizeof(int));
+        arrs[t].start = array + t*arrs[t].len;//calloc(len, sizeof(int));
         arrs[t].left_index_c = t*(len/nthreads+1);
         arrs[t].left_index_n = arrs[t].left_index_c+1;
         //printf("%d: %d %d\n", t, arrs[t].left_index_c, arrs[t].left_index_c+arrs[t].len-1);
@@ -162,6 +207,7 @@ int main(int argc, char** argv){
         ret[t] = calloc(len/nthreads+1, sizeof(int));  */
     }
 
+    printf("loaded\n");
     for(int t=1; t<nthreads; t++){ // creating threads
         if ((pthread_create(&threads[t], 0, threadFunc, &arrs[t])) != 0) {
             printf("err creating thread %d", errno);
@@ -178,7 +224,7 @@ int main(int argc, char** argv){
         if(!threads[t]) continue;
         pthread_join(threads[t], &r);
     }
-
+    print(array, len);
     //print(r, len);
 
     /*int piece;
