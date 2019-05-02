@@ -136,24 +136,9 @@ int* threadFunc(void* argm){
         //arg->neigh_mutex = NULL;
         //arg->neigh_omutex = NULL;
 	}
-    //if(arg->cmutex) pthread_mutex_unlock(arg->cmutex);
-    //arg->mutex = NULL;
-    //arg->omutex = NULL;
-    /*if(arg->neigh_omutex)
-        pthread_mutex_unlock(arg->neigh_omutex);
-    if(arg->neigh_mutex)
-        pthread_mutex_unlock(arg->neigh_mutex);*/
     pthread_mutex_unlock(arg->mutex);
     pthread_mutex_unlock(arg->omutex);
-    /*for(int t = 0; t< arg->total_num; t++){
-       //printf("freeing mutexes in %d\n", t);
-       //if(arg->mutexes[t]) pthread_mutex_unlock(arg->mutexes[t]);
-       //pthread_mutex_unlock(arg->omutexes[t]); 
-       arg->mutexes[t] = NULL;
-       arg->omutexes[t] = NULL;
-    }*/
     fflush(stdout);
-    //if(arg->nmutex) pthread_mutex_unlock(arg->nmutex);
     print(arg->arr, arg->total_len);
     sem_post(&finish_sem); 
 
@@ -194,14 +179,12 @@ int main(int argc, char** argv){
 
         if(t < nthreads-1){ 
             arrs[t].len = len/nthreads;
-            //pthread_mutex_init(arrs[t].nmutex, NULL);
         }
         else{
             arrs[t].len = len - (len/nthreads)*t;
             arrs[t].neigh_omutex = NULL;
             arrs[t].neigh_mutex = NULL;
         }
-        //printf("%d: %d\n", t, arrs[t].len);
         if(t > 0){
             arrs[t-1].neigh_omutex = arrs[t].omutex;
             arrs[t-1].neigh_mutex = arrs[t].mutex;
@@ -212,11 +195,6 @@ int main(int argc, char** argv){
         arrs[t].start = array + t*arrs[t].len;//calloc(len, sizeof(int));
         arrs[t].left_index_c = t*(len/nthreads+1);
         arrs[t].left_index_n = arrs[t].left_index_c+1;
-       // arrs[t].mutexes = &mutexes;
-        //arrs[t].omutexes = &omutexes;
-        //printf("%d: %d %d\n", t, arrs[t].left_index_c, arrs[t].left_index_c+arrs[t].len-1);
-        /*memcpy(arrs[t].arr, array, len*sizeof(int));  
-        ret[t] = calloc(len/nthreads+1, sizeof(int));  */
     }
 
     printf("loaded\n");
@@ -233,7 +211,7 @@ int main(int argc, char** argv){
 
     sem_wait(&finish_sem); 
     fflush(stdout);
-    print(array, len);
+    //print(array, len);
 
     /*int piece;
     for(int a=0; a < nthreads; a++){ // printing results
