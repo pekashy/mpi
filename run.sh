@@ -1,4 +1,4 @@
 #!/bin/bash
 make
 #ls
-mpirun -np 4 --oversubscribe ./run 2
+mpirun -np 9 --oversubscribe ./run 2
